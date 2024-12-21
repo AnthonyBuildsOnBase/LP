@@ -27,6 +27,16 @@ with open("guage.json") as f:
     gauge_abi = json.load(f)
 with open("pool.json") as f:
     pool_abi = json.load(f)
+erc20_abi = [{
+    "constant": True,
+    "inputs": [],
+    "name": "decimals",
+    "outputs": [{
+        "name": "",
+        "type": "uint8"
+    }],
+    "type": "function"
+}]
 
 # Access the gauge and pool contracts
 gauge_contract = web3.eth.contract(
@@ -53,16 +63,24 @@ try:
     token0_address = pool_contract.functions.token0().call()
     token1_address = pool_contract.functions.token1().call()
 
+    # Access token contracts
+    token0_contract = web3.eth.contract(
+        address=web3.to_checksum_address(token0_address), abi=erc20_abi)
+    token1_contract = web3.eth.contract(
+        address=web3.to_checksum_address(token1_address), abi=erc20_abi)
+
+    # Fetch token decimals
+    token0_decimals = token0_contract.functions.decimals().call()
+    token1_decimals = token1_contract.functions.decimals().call()
+
     # Calculate user's share of the pool
     user_share = staked_balance_dec / total_lp_supply_dec
     user_token0 = reserve0 * user_share
     user_token1 = reserve1 * user_share
 
-    # Convert to human-readable format
-    user_token0_human_readable = user_token0 / Decimal(
-        10**18)  # Assuming 18 decimals
-    user_token1_human_readable = user_token1 / Decimal(
-        10**18)  # Assuming 18 decimals
+    # Convert to human-readable format using token decimals
+    user_token0_human_readable = user_token0 / Decimal(10**token0_decimals)
+    user_token1_human_readable = user_token1 / Decimal(10**token1_decimals)
 
     print(
         f"Your share of Token0 ({token0_address}): {user_token0_human_readable}"
@@ -70,6 +88,22 @@ try:
     print(
         f"Your share of Token1 ({token1_address}): {user_token1_human_readable}"
     )
+
+    # Fetch rewards earned from the gauge
+    rewards_earned = gauge_contract.functions.earned(
+        web3.to_checksum_address(WALLET_ADDRESS)).call()
+    rewards_earned_dec = Decimal(rewards_earned)
+
+    # Fetch reward token address and decimals
+    reward_token_address = gauge_contract.functions.rewardToken().call()
+    reward_token_contract = web3.eth.contract(
+        address=web3.to_checksum_address(reward_token_address), abi=erc20_abi)
+    reward_token_decimals = reward_token_contract.functions.decimals().call()
+
+    # Convert rewards to human-readable format
+    rewards_human_readable = rewards_earned_dec / Decimal(
+        10**reward_token_decimals)
+    print(f"Rewards earned ({reward_token_address}): {rewards_human_readable}")
 
 except Exception as e:
     print(f"Error: {e}")
