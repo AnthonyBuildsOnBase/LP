@@ -6,12 +6,10 @@ import os
 # Load environment variables (e.g., API key, wallet address)
 load_dotenv()
 
-# Your wallet address and Aerodrome contract address
-WALLET_ADDRESS = "0xbdA0c74E10F166EdAbD5ed13A75efC2ae3Fa1896"
-CONTRACT_ADDRESS = "0x6cDcb1C4A4D1C3C6d054b27AC5B77e89eAFb971d"  # Replace with the actual pool contract address
-
-# Coinbase RPC endpoint
-RPC_URL = "https://api.developer.coinbase.com/rpc/v1/base/uIPZ98fjLaKE3yKltlVBhMewDhtOBJyD"
+# Load environment variables
+WALLET_ADDRESS = os.getenv('WALLET_ADDRESS')
+CONTRACT_ADDRESS = os.getenv('CONTRACT_ADDRESS')
+RPC_URL = os.getenv('RPC_URL')
 
 # Connect to the blockchain
 web3 = Web3(Web3.HTTPProvider(RPC_URL))
