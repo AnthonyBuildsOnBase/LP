@@ -28,3 +28,5 @@ def calculate_user_share(staked_balance, total_supply, reserve0, reserve1):
 
 def to_human_readable(amount, decimals):
     return Decimal(amount) / Decimal(10**decimals)
+
+
