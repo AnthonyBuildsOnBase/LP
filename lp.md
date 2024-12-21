@@ -1,9 +1,9 @@
 
 
 pools
-[] get token share
-[] get rewards in token
-[] get rewards in USDC
+[x] get token share
+[x] get rewards in token and USDC
+
 
 [] calculate daily rewards
 
