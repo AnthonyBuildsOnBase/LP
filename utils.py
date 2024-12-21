@@ -82,3 +82,14 @@ def get_token_price(web3, pool_contract):
     except Exception as e:
         print(f"Error fetching token prices: {e}")
         return None, None
+def initialize_contracts(web3):
+    gauge_contract = load_contract(web3, config.GAUGE_CONTRACT_ADDRESS, "guage.json")
+    pool_contract = load_contract(web3, config.POOL_CONTRACT_ADDRESS, "pool.json")
+    
+    token0_address = pool_contract.functions.token0().call()
+    token1_address = pool_contract.functions.token1().call()
+    
+    token0_contract = web3.eth.contract(address=web3.to_checksum_address(token0_address), abi=config.ERC20_ABI)
+    token1_contract = web3.eth.contract(address=web3.to_checksum_address(token1_address), abi=config.ERC20_ABI)
+    
+    return gauge_contract, pool_contract, token0_contract, token1_contract, token0_address, token1_address
