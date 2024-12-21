@@ -1,109 +1,67 @@
-import json
+
 from web3 import Web3
-import os
-from decimal import Decimal, getcontext
+import config
+import utils
 
-# Set precision for Decimal calculations
-getcontext().prec = 30
+def main():
+    # Connect to blockchain
+    web3 = utils.connect_web3(config.CDP_URL)
+    if not web3:
+        return
 
-# Wallet and Contract Addresses
-WALLET_ADDRESS = "0xbdA0c74E10F166EdAbD5ed13A75efC2ae3Fa1896"
-GAUGE_CONTRACT_ADDRESS = "0x4F09bAb2f0E15e2A078A227FE1537665F55b8360"
-POOL_CONTRACT_ADDRESS = "0x6cDcb1C4A4D1C3C6d054b27AC5B77e89eAFb971d"
+    try:
+        # Load contracts
+        gauge_contract = utils.load_contract(web3, config.GAUGE_CONTRACT_ADDRESS, "guage.json")
+        pool_contract = utils.load_contract(web3, config.POOL_CONTRACT_ADDRESS, "pool.json")
 
-# Get Coinbase CDP credentials from environment variables
-CDP_URL = os.environ.get('COINBASE_CDP_URL')
-# Connect to the blockchain
-web3 = Web3(Web3.HTTPProvider(CDP_URL))
+        # Fetch staked balance
+        staked_balance = gauge_contract.functions.balanceOf(
+            web3.to_checksum_address(config.WALLET_ADDRESS)).call()
+        print(f"Staked LP tokens in gauge: {staked_balance} (raw units)")
 
-if web3.is_connected():
-    print("Connected to Coinbase RPC!")
-else:
-    print("Failed to connect to Coinbase RPC.")
-    exit()
+        # Fetch pool info
+        total_supply = pool_contract.functions.totalSupply().call()
+        reserves = pool_contract.functions.getReserves().call()
+        token0_address = pool_contract.functions.token0().call()
+        token1_address = pool_contract.functions.token1().call()
 
-# Load the ABIs
-with open("guage.json") as f:
-    gauge_abi = json.load(f)
-with open("pool.json") as f:
-    pool_abi = json.load(f)
-erc20_abi = [{
-    "constant": True,
-    "inputs": [],
-    "name": "decimals",
-    "outputs": [{
-        "name": "",
-        "type": "uint8"
-    }],
-    "type": "function"
-}]
+        # Create token contracts
+        token0_contract = web3.eth.contract(
+            address=web3.to_checksum_address(token0_address),
+            abi=config.ERC20_ABI)
+        token1_contract = web3.eth.contract(
+            address=web3.to_checksum_address(token1_address),
+            abi=config.ERC20_ABI)
 
-# Access the gauge and pool contracts
-gauge_contract = web3.eth.contract(
-    address=web3.to_checksum_address(GAUGE_CONTRACT_ADDRESS), abi=gauge_abi)
-pool_contract = web3.eth.contract(
-    address=web3.to_checksum_address(POOL_CONTRACT_ADDRESS), abi=pool_abi)
+        # Get token decimals
+        token0_decimals = utils.get_token_info(web3, token0_contract)
+        token1_decimals = utils.get_token_info(web3, token1_contract)
 
-try:
-    # Fetch staked balance from gauge
-    staked_balance = gauge_contract.functions.balanceOf(
-        web3.to_checksum_address(WALLET_ADDRESS)).call()
-    staked_balance_dec = Decimal(staked_balance)
-    print(f"Staked LP tokens in gauge: {staked_balance_dec} (raw units)")
+        # Calculate shares
+        _, user_token0, user_token1 = utils.calculate_user_share(
+            staked_balance, total_supply, reserves[0], reserves[1])
 
-    # Fetch total supply of LP tokens from pool
-    total_lp_supply = pool_contract.functions.totalSupply().call()
-    total_lp_supply_dec = Decimal(total_lp_supply)
+        # Convert to human readable
+        token0_human = utils.to_human_readable(user_token0, token0_decimals)
+        token1_human = utils.to_human_readable(user_token1, token1_decimals)
 
-    # Fetch reserves from pool
-    reserves = pool_contract.functions.getReserves().call()
-    reserve0, reserve1 = Decimal(reserves[0]), Decimal(reserves[1])
+        print(f"Your share of Token0 ({token0_address}): {token0_human}")
+        print(f"Your share of Token1 ({token1_address}): {token1_human}")
 
-    # Fetch token0 and token1 addresses from pool
-    token0_address = pool_contract.functions.token0().call()
-    token1_address = pool_contract.functions.token1().call()
+        # Fetch rewards
+        rewards_earned = gauge_contract.functions.earned(
+            web3.to_checksum_address(config.WALLET_ADDRESS)).call()
+        reward_token_address = gauge_contract.functions.rewardToken().call()
+        reward_token_contract = web3.eth.contract(
+            address=web3.to_checksum_address(reward_token_address),
+            abi=config.ERC20_ABI)
+        reward_decimals = utils.get_token_info(web3, reward_token_contract)
+        
+        rewards_human = utils.to_human_readable(rewards_earned, reward_decimals)
+        print(f"Rewards earned ({reward_token_address}): {rewards_human}")
 
-    # Access token contracts
-    token0_contract = web3.eth.contract(
-        address=web3.to_checksum_address(token0_address), abi=erc20_abi)
-    token1_contract = web3.eth.contract(
-        address=web3.to_checksum_address(token1_address), abi=erc20_abi)
+    except Exception as e:
+        print(f"Error: {e}")
 
-    # Fetch token decimals
-    token0_decimals = token0_contract.functions.decimals().call()
-    token1_decimals = token1_contract.functions.decimals().call()
-
-    # Calculate user's share of the pool
-    user_share = staked_balance_dec / total_lp_supply_dec
-    user_token0 = reserve0 * user_share
-    user_token1 = reserve1 * user_share
-
-    # Convert to human-readable format using token decimals
-    user_token0_human_readable = user_token0 / Decimal(10**token0_decimals)
-    user_token1_human_readable = user_token1 / Decimal(10**token1_decimals)
-
-    print(
-        f"Your share of Token0 ({token0_address}): {user_token0_human_readable}"
-    )
-    print(
-        f"Your share of Token1 ({token1_address}): {user_token1_human_readable}"
-    )
-
-    # Fetch rewards earned from the gauge
-    rewards_earned = gauge_contract.functions.earned(
-        web3.to_checksum_address(WALLET_ADDRESS)).call()
-    rewards_earned_dec = Decimal(rewards_earned)
-
-    # Fetch reward token address and decimals
-    reward_token_address = gauge_contract.functions.rewardToken().call()
-    reward_token_contract = web3.eth.contract(
-        address=web3.to_checksum_address(reward_token_address), abi=erc20_abi)
-    reward_token_decimals = reward_token_contract.functions.decimals().call()
-
-    # Convert rewards to human-readable format
-    rewards_human_readable = rewards_earned_dec / Decimal(
-        10**reward_token_decimals)
-    print(f"Rewards earned ({reward_token_address}): {rewards_human_readable}")
-
-except Exception as e:
-    print(f"Error: {e}")
+if __name__ == "__main__":
+    main()
