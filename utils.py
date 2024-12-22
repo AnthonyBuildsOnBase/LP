@@ -36,52 +36,51 @@ def to_human_readable(amount, decimals):
     return Decimal(amount) / Decimal(10**decimals)
 
 
-def get_token_price(web3, pool_contract):
+def get_token_price(web3, pool_contract, token_contract):
     """
-    Fetch the exchange rate of two tokens from the pool contract.
+    Get price of a specific token from the pool.
     Args:
-        web3: A Web3 instance.
-        pool_contract: The pool contract instance.
+        web3: A Web3 instance
+        pool_contract: The pool contract instance
+        token_contract: The token contract whose price we want
     Returns:
-        A tuple containing:
-        - price_token0_in_token1: Price of Token0 in terms of Token1.
-        - price_token1_in_token0: Price of Token1 in terms of Token0.
+        Decimal: Price of the token in terms of the other token in the pool
     """
     try:
-        # Fetch reserves from the pool contract
+        # Get token addresses from pool
+        token0_address = pool_contract.functions.token0().call()
+        token1_address = pool_contract.functions.token1().call()
+        token_address = token_contract.address
+
+        # Verify token is in pool
+        if token_address not in [token0_address, token1_address]:
+            raise ValueError("Token not in this pool")
+
+        # Get reserves and decimals
         reserves = pool_contract.functions.getReserves().call()
         reserve0 = Decimal(reserves[0])
         reserve1 = Decimal(reserves[1])
 
-        # Fetch token decimals
-        token0_address = pool_contract.functions.token0().call()
-        token1_address = pool_contract.functions.token1().call()
+        # Get decimals for both tokens
+        token0_contract = web3.eth.contract(address=web3.to_checksum_address(token0_address), abi=config.ERC20_ABI)
+        token1_contract = web3.eth.contract(address=web3.to_checksum_address(token1_address), abi=config.ERC20_ABI)
+        
+        token0_decimals = Decimal(10**token0_contract.functions.decimals().call())
+        token1_decimals = Decimal(10**token1_contract.functions.decimals().call())
 
-        token0_contract = web3.eth.contract(
-            address=web3.to_checksum_address(token0_address),
-            abi=config.ERC20_ABI)
-        token1_contract = web3.eth.contract(
-            address=web3.to_checksum_address(token1_address),
-            abi=config.ERC20_ABI)
-
-        token0_decimals = Decimal(
-            10**token0_contract.functions.decimals().call())
-        token1_decimals = Decimal(
-            10**token1_contract.functions.decimals().call())
-
-        # Adjust reserves to human-readable format
+        # Adjust reserves to human-readable
         reserve0_human = reserve0 / token0_decimals
         reserve1_human = reserve1 / token1_decimals
 
-        # Calculate prices
-        price_token0_in_token1 = reserve1_human / reserve0_human
-        price_token1_in_token0 = reserve0_human / reserve1_human
-
-        return price_token0_in_token1, price_token1_in_token0
+        # Return price based on which token we're looking for
+        if token_address == token0_address:
+            return reserve1_human / reserve0_human
+        else:
+            return reserve0_human / reserve1_human
 
     except Exception as e:
-        print(f"Error fetching token prices: {e}")
-        return None, None
+        print(f"Error getting token price: {e}")
+        return None
 def initialize_contracts(web3):
     gauge_contract = load_contract(web3, config.GAUGE_CONTRACT_ADDRESS, "guage.json")
     pool_contract = load_contract(web3, config.POOL_CONTRACT_ADDRESS, "pool.json")
