@@ -63,7 +63,9 @@ class LPPosition:
         }
 
     def get_token_prices(self):
-        return utils.get_token_price(self.web3, self.pool_contract)
+        price_token0 = utils.get_token_price(self.web3, self.pool_contract, self.token0_contract)
+        price_token1 = utils.get_token_price(self.web3, self.pool_contract, self.token1_contract)
+        return price_token0, price_token1
 
     def get_rewards(self):
         rewards_earned = self.gauge_contract.functions.earned(
