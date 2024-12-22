@@ -7,5 +7,7 @@ authors = ["Your Name <you@example.com>"]
 requires-python = ">=3.11"
 dependencies = [
     "web3",
-    "python-dotenv"
+    "python-dotenv",
+    "cdp>=0.0.2",
+    "eth-account>=0.13.4",
 ]
